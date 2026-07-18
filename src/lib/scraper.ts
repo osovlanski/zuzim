@@ -1,6 +1,6 @@
 import { createScraper, CompanyTypes } from 'israeli-bank-scrapers';
 import crypto from 'crypto';
-import { upsertTransaction, insertScrapeLog } from './db';
+import { upsertTransaction, insertScrapeLog, upsertAccountBalance } from './db';
 import { categorize } from './categorizer';
 
 export interface ScrapeResult {
@@ -56,6 +56,10 @@ async function scrapeAccount(
 
     let totalSaved = 0;
     for (const account of result.accounts ?? []) {
+      if (typeof account.balance === 'number') {
+        upsertAccountBalance(accountId, account.balance);
+      }
+
       for (const txn of account.txns) {
         const dateStr = new Date(txn.date).toISOString().split('T')[0];
         const processDateStr = txn.processedDate
@@ -63,7 +67,7 @@ async function scrapeAccount(
           : null;
 
         const transactionId = generateTransactionId(accountId, dateStr, txn.description, txn.chargedAmount);
-        const category = categorize(txn.description);
+        const category = txn.chargedAmount > 0 ? 'Income' : categorize(txn.description);
 
         upsertTransaction({
           id: transactionId,
@@ -119,6 +123,17 @@ export async function scrapeAllAccounts(): Promise<ScrapeResult[]> {
       password: process.env.MAX_PASSWORD,
     });
     results.push(maxResult);
+  }
+
+  // ponytail: leumi.js has no OTP hook in this library version — if the bank forces SMS
+  // verification on this login, the headless scrape will just error out here (caught below),
+  // same as any other scrape failure. No manual-OTP UI exists to recover from that.
+  if (process.env.LEUMI_ID && process.env.LEUMI_PASSWORD) {
+    const leumiResult = await scrapeAccount('leumi_bank', CompanyTypes.leumi, {
+      username: process.env.LEUMI_ID,
+      password: process.env.LEUMI_PASSWORD,
+    });
+    results.push(leumiResult);
   }
 
   return results;

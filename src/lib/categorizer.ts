@@ -34,7 +34,7 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   ],
 };
 
-export type Category = 'Food' | 'Transport' | 'Shopping' | 'Health' | 'Entertainment' | 'Utilities' | 'Other';
+export type Category = 'Food' | 'Transport' | 'Shopping' | 'Health' | 'Entertainment' | 'Utilities' | 'Income' | 'Other';
 
 export function categorize(description: string): Category {
   const normalizedDescription = description.toLowerCase();

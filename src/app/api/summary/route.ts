@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { querySummary, getLastScrapeTime } from '@/lib/db';
+import { querySummary, getLastScrapeTime, getAccountBalances } from '@/lib/db';
 
 function getMonthRange(): { from: string; to: string } {
   const now = new Date();
@@ -32,6 +32,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const weekRange = getWeekRange();
     const weekSummary = querySummary(weekRange.from, weekRange.to);
     const lastScraped = getLastScrapeTime();
+    const balances = getAccountBalances();
 
     return NextResponse.json({
       ...main,
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       todayCount: todaySummary.transactionCount,
       weekTotal: weekSummary.totalAmount,
       weekCount: weekSummary.transactionCount,
+      balances,
       lastScraped,
       from,
       to,

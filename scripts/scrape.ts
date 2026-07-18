@@ -1,8 +1,11 @@
 import 'dotenv/config';
-import { scrapeAllAccounts } from '../src/lib/scraper';
-import { sendDailySummary, sendAlert } from '../src/lib/telegram';
 
 async function main() {
+  // Deferred import: eagerly importing israeli-bank-scrapers (puppeteer, yargs et al.)
+  // at module load time breaks tsx's ESM loader (yargs uses require() internally).
+  const { scrapeAllAccounts } = await import('../src/lib/scraper');
+  const { sendDailySummary, sendAlert } = await import('../src/lib/telegram');
+
   console.log('Starting scrape run...');
 
   const results = await scrapeAllAccounts();
@@ -25,6 +28,7 @@ async function main() {
 
 main().catch(async (err) => {
   console.error('Fatal error:', err);
+  const { sendAlert } = await import('../src/lib/telegram');
   await sendAlert(`🚨 Zuzim scrape script crashed: ${err.message}`).catch(() => {});
   process.exit(1);
 });

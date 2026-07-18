@@ -39,6 +39,12 @@ function initializeSchema(db: Database.Database): void {
       error_message TEXT,
       transaction_count INTEGER DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS account_balances (
+      account_id TEXT PRIMARY KEY,
+      balance REAL NOT NULL,
+      as_of TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }
 
@@ -93,6 +99,26 @@ export function insertScrapeLog(entry: Omit<ScrapeLogEntry, 'id' | 'scraped_at'>
     INSERT INTO scrape_log (account_id, status, error_message, transaction_count)
     VALUES (@account_id, @status, @error_message, @transaction_count)
   `).run(entry);
+}
+
+export interface AccountBalance {
+  account_id: string;
+  balance: number;
+  as_of: string;
+}
+
+export function upsertAccountBalance(accountId: string, balance: number): void {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO account_balances (account_id, balance, as_of)
+    VALUES (@account_id, @balance, CURRENT_TIMESTAMP)
+    ON CONFLICT(account_id) DO UPDATE SET balance = @balance, as_of = CURRENT_TIMESTAMP
+  `).run({ account_id: accountId, balance });
+}
+
+export function getAccountBalances(): AccountBalance[] {
+  const db = getDb();
+  return db.prepare('SELECT * FROM account_balances').all() as AccountBalance[];
 }
 
 export function queryTransactions(filter: TransactionFilter): { transactions: Transaction[]; total: number } {
@@ -153,7 +179,15 @@ export interface SummaryData {
   categoryBreakdown: CategorySummary[];
   totalAmount: number;
   transactionCount: number;
+  incomeTotal: number;
+  spendTotal: number;
 }
+
+// The Leumi bank account's monthly card-bill debit is the same money already counted as
+// individual card charges on visa_cal/max — summing both would double-count every card
+// purchase. Bank outflows are excluded from spend/category aggregates; bank income (salary,
+// transfers in) is kept since cards never produce income rows, so there's nothing to double-count there.
+const EXCLUDE_BANK_OUTFLOW = `NOT (account_id = 'leumi_bank' AND amount < 0)`;
 
 export function querySummary(from: string, to: string): SummaryData {
   const db = getDb();
@@ -161,31 +195,120 @@ export function querySummary(from: string, to: string): SummaryData {
   const daily = db.prepare(`
     SELECT date, SUM(amount) as total, COUNT(*) as count
     FROM transactions
-    WHERE date >= @from AND date <= @to
+    WHERE date >= @from AND date <= @to AND ${EXCLUDE_BANK_OUTFLOW}
     GROUP BY date
     ORDER BY date ASC
   `).all({ from, to }) as DailySummary[];
 
+  // Expense categories only — Income would otherwise dominate the pie chart and hide where money actually goes.
   const categoryBreakdown = db.prepare(`
     SELECT category, SUM(amount) as total, COUNT(*) as count
     FROM transactions
-    WHERE date >= @from AND date <= @to
+    WHERE date >= @from AND date <= @to AND amount < 0 AND account_id != 'leumi_bank'
     GROUP BY category
     ORDER BY total ASC
   `).all({ from, to }) as CategorySummary[];
 
   const aggregates = db.prepare(`
-    SELECT SUM(amount) as totalAmount, COUNT(*) as transactionCount
+    SELECT
+      SUM(amount) as totalAmount,
+      COUNT(*) as transactionCount,
+      SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as incomeTotal,
+      SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END) as spendTotal
     FROM transactions
-    WHERE date >= @from AND date <= @to
-  `).get({ from, to }) as { totalAmount: number; transactionCount: number };
+    WHERE date >= @from AND date <= @to AND ${EXCLUDE_BANK_OUTFLOW}
+  `).get({ from, to }) as { totalAmount: number; transactionCount: number; incomeTotal: number; spendTotal: number };
 
   return {
     daily,
     categoryBreakdown,
     totalAmount: aggregates.totalAmount ?? 0,
     transactionCount: aggregates.transactionCount ?? 0,
+    incomeTotal: aggregates.incomeTotal ?? 0,
+    spendTotal: aggregates.spendTotal ?? 0,
   };
+}
+
+export interface RecurringCharge {
+  description: string;
+  category: string;
+  monthsSeen: number;
+  avgAmount: number;
+  lastDate: string;
+}
+
+export interface MerchantSpend {
+  description: string;
+  category: string;
+  total: number;
+  count: number;
+}
+
+export interface CategoryDelta {
+  category: string;
+  currentTotal: number;
+  previousTotal: number;
+  percentChange: number | null;
+}
+
+export interface InsightsData {
+  recurringCharges: RecurringCharge[];
+  topMerchants: MerchantSpend[];
+  categoryDeltas: CategoryDelta[];
+}
+
+// ponytail: exact-description match to detect recurring charges — merchants that vary their
+// description slightly (extra reference numbers, etc.) won't be caught. Upgrade to fuzzy/prefix
+// matching if that turns out to miss real subscriptions.
+export function getInsights(currentMonthFrom: string, currentMonthTo: string, previousMonthFrom: string, previousMonthTo: string): InsightsData {
+  const db = getDb();
+
+  const recurringCharges = db.prepare(`
+    SELECT
+      description,
+      category,
+      COUNT(DISTINCT strftime('%Y-%m', date)) as monthsSeen,
+      AVG(amount) as avgAmount,
+      MAX(date) as lastDate
+    FROM transactions
+    WHERE amount < 0 AND account_id != 'leumi_bank'
+    GROUP BY description
+    HAVING monthsSeen >= 2 AND COUNT(*) <= monthsSeen + 1
+    ORDER BY avgAmount ASC
+    LIMIT 20
+  `).all() as RecurringCharge[];
+
+  const topMerchants = db.prepare(`
+    SELECT description, category, SUM(amount) as total, COUNT(*) as count
+    FROM transactions
+    WHERE amount < 0 AND account_id != 'leumi_bank' AND date >= @from AND date <= @to
+    GROUP BY description
+    ORDER BY total ASC
+    LIMIT 10
+  `).all({ from: currentMonthFrom, to: currentMonthTo }) as MerchantSpend[];
+
+  const currentByCategory = db.prepare(`
+    SELECT category, SUM(amount) as total
+    FROM transactions
+    WHERE amount < 0 AND account_id != 'leumi_bank' AND date >= @from AND date <= @to
+    GROUP BY category
+  `).all({ from: currentMonthFrom, to: currentMonthTo }) as { category: string; total: number }[];
+
+  const previousByCategory = db.prepare(`
+    SELECT category, SUM(amount) as total
+    FROM transactions
+    WHERE amount < 0 AND account_id != 'leumi_bank' AND date >= @from AND date <= @to
+    GROUP BY category
+  `).all({ from: previousMonthFrom, to: previousMonthTo }) as { category: string; total: number }[];
+
+  const previousTotals = new Map(previousByCategory.map(row => [row.category, row.total]));
+  const categoryDeltas: CategoryDelta[] = currentByCategory.map(row => {
+    const previousTotal = previousTotals.get(row.category) ?? 0;
+    const percentChange = previousTotal !== 0 ? ((row.total - previousTotal) / previousTotal) * 100 : null;
+    return { category: row.category, currentTotal: row.total, previousTotal, percentChange };
+  });
+
+  return { recurringCharges, topMerchants, categoryDeltas };
 }
 
 export function getLastScrapeTime(): string | null {

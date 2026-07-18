@@ -29,8 +29,24 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-## Deploy on Vercel
+## Deploy on Railway
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+This app stores data in a local SQLite file (`zuzim.db`), so it needs persistent disk — Railway's
+volumes work, Vercel's serverless filesystem does not.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Create a Railway project from this repo (Nixpacks auto-detects Next.js; build = `npm run build`, start = `npm run start`).
+2. Attach a persistent volume mounted where the app runs (e.g. `/app`) so `zuzim.db` survives deploys.
+3. Set environment variables from `.env.local.example` — at minimum `APP_USER` / `APP_PASSWORD`
+   (HTTP Basic Auth gate, required once the app is reachable from the internet) and whichever
+   scraper credentials you use (`VISA_CAL_*`, `MAX_*`, `LEUMI_*`).
+4. For the daily scrape + Telegram summary, add a Railway Cron Job service running
+   `npm run scrape` on a schedule (e.g. `0 20 * * *`), pointed at the same volume.
+5. Open the app from your phone browser and use "Add to Home Screen" — it's a PWA
+   (`public/manifest.json`), so it installs like a native app icon.
+
+## Not built here (flagged, not silently skipped)
+
+- **Stock buy/sell signals** — scope was set to price/trend data only; no automated trading calls.
+- **Leumi OTP handling** — `israeli-bank-scrapers`'s Leumi module has no OTP hook in the installed
+  version. If the bank forces SMS verification on that login, the scrape just errors out; there's
+  no in-app way to complete it.

@@ -30,15 +30,24 @@ export default function ScrapeButton({ onScrapeComplete }: ScrapeButtonProps) {
       <button
         onClick={handleScrape}
         disabled={isScraping}
-        className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30"
       >
-        {isScraping ? 'Scraping...' : 'Scrape Now'}
+        <svg
+          className={`w-4 h-4 ${isScraping ? 'animate-spin-icon' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2.5}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0114.13-3.36M20 15a9 9 0 01-14.13 3.36" />
+        </svg>
+        {isScraping ? 'Syncing...' : 'Sync'}
       </button>
       {lastResult && (
-        <span className={`text-sm ${lastResult.errors.length > 0 ? 'text-red-500' : 'text-green-600'}`}>
+        <span className={`text-xs ${lastResult.errors.length > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
           {lastResult.errors.length > 0
             ? lastResult.errors[0]
-            : `${lastResult.scraped} transactions saved`}
+            : `+${lastResult.scraped} saved`}
         </span>
       )}
     </div>

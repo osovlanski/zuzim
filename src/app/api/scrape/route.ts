@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
-import { scrapeAllAccounts } from '@/lib/scraper';
 
 export async function POST(): Promise<NextResponse> {
   try {
+    // Deferred import: eagerly importing israeli-bank-scrapers (puppeteer et al.) at module
+    // load time breaks Next's build-time "collect page data" step. Load it only when the
+    // route actually runs.
+    const { scrapeAllAccounts } = await import('@/lib/scraper');
     const results = await scrapeAllAccounts();
 
     const totalScraped = results.reduce((sum, r) => sum + r.scrapedCount, 0);
