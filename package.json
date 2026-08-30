@@ -7,16 +7,19 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "scrape": "tsx --env-file=.env.local scripts/scrape.ts"
+    "test": "tsx --test src/**/*.test.ts",
+    "scrape": "tsx --env-file=.env.local scripts/scrape.ts",
+    "backup": "tsx --env-file=.env.local scripts/backup.ts",
+    "backup:verify": "tsx --env-file=.env.local scripts/verify-backup.ts"
   },
   "dependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node-telegram-bot-api": "^0.64.14",
     "better-sqlite3": "^12.11.1",
     "dotenv": "^17.3.1",
-    "israeli-bank-scrapers": "^6.7.1",
-    "next": "16.1.6",
-    "node-telegram-bot-api": "^0.67.0",
+    "israeli-bank-scrapers": "^6.9.0",
+    "next": "16.3.3",
+    "node-telegram-bot-api": "^2.1.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "recharts": "^3.7.0",

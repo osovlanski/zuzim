@@ -1,12 +1,12 @@
-import TelegramBot from 'node-telegram-bot-api';
+import { Bot } from 'node-telegram-bot-api';
 import { querySummary } from './db';
 
-let botInstance: TelegramBot | null = null;
+let botInstance: Bot | null = null;
 
-function getBot(): TelegramBot | null {
+function getBot(): Bot | null {
   if (!process.env.TELEGRAM_BOT_TOKEN) return null;
   if (!botInstance) {
-    botInstance = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
+    botInstance = new Bot(process.env.TELEGRAM_BOT_TOKEN);
   }
   return botInstance;
 }
@@ -15,7 +15,7 @@ export async function sendAlert(message: string): Promise<void> {
   const bot = getBot();
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!bot || !chatId) return;
-  await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  await bot.api.sendMessage({ chat_id: chatId, text: message, parse_mode: 'Markdown' });
 }
 
 export async function sendDailySummary(): Promise<void> {

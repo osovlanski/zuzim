@@ -1,51 +1,19 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import { applyMigrations } from './migrations';
 
-const DB_PATH = path.join(process.cwd(), 'zuzim.db');
+export const DB_PATH = process.env.ZUZIM_DB_PATH ?? path.join(process.cwd(), 'zuzim.db');
 
 let dbInstance: Database.Database | null = null;
 
-function getDb(): Database.Database {
+export function getDb(): Database.Database {
   if (!dbInstance) {
     dbInstance = new Database(DB_PATH);
     dbInstance.pragma('journal_mode = WAL');
-    initializeSchema(dbInstance);
+    dbInstance.pragma('busy_timeout = 5000');
+    applyMigrations(dbInstance);
   }
   return dbInstance;
-}
-
-function initializeSchema(db: Database.Database): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS transactions (
-      id TEXT PRIMARY KEY,
-      account_id TEXT NOT NULL,
-      date TEXT NOT NULL,
-      process_date TEXT,
-      description TEXT NOT NULL,
-      amount REAL NOT NULL,
-      currency TEXT DEFAULT 'ILS',
-      category TEXT DEFAULT 'Other',
-      memo TEXT,
-      status TEXT DEFAULT 'Completed',
-      type TEXT DEFAULT 'Normal',
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS scrape_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      account_id TEXT NOT NULL,
-      scraped_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      status TEXT NOT NULL,
-      error_message TEXT,
-      transaction_count INTEGER DEFAULT 0
-    );
-
-    CREATE TABLE IF NOT EXISTS account_balances (
-      account_id TEXT PRIMARY KEY,
-      balance REAL NOT NULL,
-      as_of TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
 }
 
 export interface Transaction {

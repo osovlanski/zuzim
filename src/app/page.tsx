@@ -26,6 +26,12 @@ interface SummaryApiResponse {
   categoryBreakdown: { category: string; total: number; count: number }[];
   balances: AccountBalance[];
   lastScraped: string | null;
+  scrapeHealth: Array<{
+    accountId: string;
+    lastAttemptAt: string;
+    status: 'success' | 'error';
+    transactionCount: number;
+  }>;
 }
 
 const ACCOUNT_LABELS: Record<string, string> = {
@@ -112,6 +118,26 @@ export default function DashboardPage() {
                     </p>
                   </div>
                 ))}
+              </div>
+            )}
+            {summary.scrapeHealth.length > 0 && (
+              <div className="mt-4 glass-card rounded-2xl p-4" aria-label="Account sync health">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3">Account sync health</p>
+                <div className="flex flex-wrap gap-4">
+                  {summary.scrapeHealth.map(account => (
+                    <div key={account.accountId} className="flex items-center gap-2 text-sm">
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full ${account.status === 'success' ? 'bg-emerald-400' : 'bg-red-400'}`}
+                        aria-hidden="true"
+                      />
+                      <span className="text-slate-300">{ACCOUNT_LABELS[account.accountId] ?? account.accountId}</span>
+                      <span className="text-slate-500">
+                        {account.status === 'success' ? `${account.transactionCount} imported` : 'Sync failed'} ·{' '}
+                        {new Date(`${account.lastAttemptAt}Z`).toLocaleString('he-IL')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
