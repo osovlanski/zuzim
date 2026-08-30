@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { querySummary, getLastScrapeTime, getAccountBalances } from '@/lib/db';
+import { querySummary, getLastScrapeTime, getAccountBalances, getDb } from '@/lib/db';
+import { queryScrapeHealth } from '@/lib/scrape-health';
 
 function getMonthRange(): { from: string; to: string } {
   const now = new Date();
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const weekSummary = querySummary(weekRange.from, weekRange.to);
     const lastScraped = getLastScrapeTime();
     const balances = getAccountBalances();
+    const scrapeHealth = queryScrapeHealth(getDb());
 
     return NextResponse.json({
       ...main,
@@ -41,6 +43,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       weekTotal: weekSummary.totalAmount,
       weekCount: weekSummary.transactionCount,
       balances,
+      scrapeHealth,
       lastScraped,
       from,
       to,

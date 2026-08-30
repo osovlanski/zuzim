@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendDailySummary } from '@/lib/telegram';
+import { authorizeCronRequest } from '@/lib/security';
 
 // Trigger a Telegram daily summary message.
-// Protect with CRON_SECRET env var — pass as Bearer token or ?secret= query param.
+// Protect with CRON_SECRET env var passed as a Bearer token.
 // Example cron: 0 20 * * * curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/daily-summary
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret) {
-    const authHeader = request.headers.get('authorization');
-    const querySecret = request.nextUrl.searchParams.get('secret');
-    const isAuthorized = authHeader === `Bearer ${cronSecret}` || querySecret === cronSecret;
-
-    if (!isAuthorized) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  if (!authorizeCronRequest(request.headers.get('authorization'), cronSecret)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
